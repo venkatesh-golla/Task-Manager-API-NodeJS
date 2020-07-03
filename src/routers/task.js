@@ -1,6 +1,10 @@
 const express = require('express')
 const Task = require('../models/task')
 const auth=require('../middleware/auth')
+const multer=require('multer')
+const { findById } = require('../models/task')
+const sharp = require('sharp')
+const { ResumeToken } = require('mongodb')
 const router = new express.Router()
 
 router.post('/tasks',auth ,async (req, res) => {
@@ -99,6 +103,63 @@ router.delete('/tasks/:id',auth, async (req, res) => {
 
         res.send(task)
     } catch (e) {
+        res.status(500).send()
+    }
+})
+
+const upload = multer({
+    limits: {
+        fileSize: 1000000
+    },
+    fileFilter(req, file, cb) {
+        if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
+            cb(new Error('Please upload file of type jpg or jpeg or png'))
+        }
+        cb(undefined, true)
+    }
+})
+
+router.post('/tasks/:id/avatar',auth,upload.single('avatar'),async (req,res)=>{
+    try {
+        //const task = await Task.findById(_id)
+        const task= await Task.findOne({_id:req.params.id,owner:req.user._id})
+        if (!task) {
+            return res.status(404).send()
+        }
+        const buffer = await sharp(req.file.buffer).resize({ width: 300, height: 300 }).png().toBuffer()
+        task.image = buffer
+        await task.save()
+        res.send(task)
+    } catch (e) {
+        res.status(500).send()
+    }
+}, (error, req, res, next) => {
+    res.status(400).send({ error: error.message })
+})
+
+router.get('/tasks/:id/avatar',auth,async(req,res)=>{
+    try{
+        const task=await Task.findOne({_id:req.params.id,owner:req.user._id})
+        if(!task){
+            return res.status(400).send()
+        }
+        res.set('Content-Type','image/png')
+        res.send(task.image)
+    }catch(e){
+        res.status(500).send()
+    }
+})
+
+router.delete('/tasks/:id/avatar',auth,async(req,res)=>{
+    try{
+        const task=await Task.findOne({_id:req.params.id,owner:req.user._id})
+        if(!task){
+            return res.status(400).send()
+        }
+        task.image=undefined
+        await task.save()
+        res.send()
+    }catch(e){
         res.status(500).send()
     }
 })
